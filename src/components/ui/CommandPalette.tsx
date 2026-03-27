@@ -2,23 +2,65 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { searchAll } from "@/lib/data";
 import { cn, getRiskColor } from "@/lib/utils";
-import { Search, Building2, Users, Award, X } from "lucide-react";
+import { Search, Building2, Users, Award, X, Loader2 } from "lucide-react";
+
+interface SearchResult {
+  type: "company" | "founder" | "watchlist";
+  id: string;
+  name: string;
+  sub: string;
+  riskLevel?: string;
+  href: string;
+}
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [allResults, setAllResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const router = useRouter();
 
-  const results = searchAll(query);
-  const allResults = [
-    ...results.companies.map((c) => ({ type: "company" as const, id: c.id, name: c.name, sub: `${c.ticker ?? ""} · ${c.industry}`, riskLevel: c.riskScore.riskLevel, href: `/dashboard/${c.id}` })),
-    ...results.founders.map((f) => ({ type: "founder" as const, id: f.id, name: f.name, sub: f.companies.map((c) => c.name).join(", "), riskLevel: undefined, href: "/founders" })),
-    ...results.watchlist.map((w) => ({ type: "watchlist" as const, id: w.id, name: w.name, sub: `${w.companyName} · ${w.listYear}`, riskLevel: undefined, href: "/watchlist" })),
-  ];
+  // Debounced API search
+  useEffect(() => {
+    if (!query || query.length < 2) {
+      setAllResults([]);
+      return;
+    }
+
+    setSearching(true);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(query)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          const results: SearchResult[] = [
+            ...(data.companies ?? []).map((c: { id: string; name: string; ticker?: string; industry?: string; riskLevel?: string }) => ({
+              type: "company" as const, id: c.id, name: c.name,
+              sub: `${c.ticker ?? ""} · ${c.industry ?? ""}`,
+              riskLevel: c.riskLevel, href: `/dashboard/${c.id}`,
+            })),
+            ...(data.founders ?? []).map((f: { id: string; name: string; companies?: string }) => ({
+              type: "founder" as const, id: f.id, name: f.name,
+              sub: f.companies ?? "", riskLevel: undefined, href: "/founders",
+            })),
+            ...(data.watchlist ?? []).map((w: { id: string; name: string; companyName?: string; listYear?: number }) => ({
+              type: "watchlist" as const, id: w.id, name: w.name,
+              sub: `${w.companyName ?? ""} · ${w.listYear ?? ""}`,
+              riskLevel: undefined, href: "/watchlist",
+            })),
+          ];
+          setAllResults(results);
+        })
+        .catch(() => setAllResults([]))
+        .finally(() => setSearching(false));
+    }, 200);
+
+    return () => clearTimeout(debounceRef.current);
+  }, [query]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -88,17 +130,21 @@ export function CommandPalette() {
 
         {/* Results */}
         <div className="max-h-80 overflow-y-auto">
-          {query && allResults.length === 0 && (
+          {searching && (
+            <div className="px-4 py-8 text-center"><Loader2 className="w-4 h-4 animate-spin mx-auto text-muted" /></div>
+          )}
+
+          {query.length >= 2 && !searching && allResults.length === 0 && (
             <div className="px-4 py-8 text-center text-sm text-muted">No results for &quot;{query}&quot;</div>
           )}
 
-          {!query && (
+          {query.length < 2 && (
             <div className="px-4 py-6 text-center text-sm text-muted/50">
               Start typing to search across all data...
             </div>
           )}
 
-          {results.companies.length > 0 && (
+          {allResults.some((r) => r.type === "company") && (
             <div>
               <div className="px-4 py-1.5 text-[10px] text-muted uppercase tracking-wider bg-white/[0.02]">Companies</div>
               {allResults.filter((r) => r.type === "company").map((result, i) => {
@@ -128,7 +174,7 @@ export function CommandPalette() {
             </div>
           )}
 
-          {results.founders.length > 0 && (
+          {allResults.some((r) => r.type === "founder") && (
             <div>
               <div className="px-4 py-1.5 text-[10px] text-muted uppercase tracking-wider bg-white/[0.02]">Founders</div>
               {allResults.filter((r) => r.type === "founder").map((result) => {
@@ -153,7 +199,7 @@ export function CommandPalette() {
             </div>
           )}
 
-          {results.watchlist.length > 0 && (
+          {allResults.some((r) => r.type === "watchlist") && (
             <div>
               <div className="px-4 py-1.5 text-[10px] text-muted uppercase tracking-wider bg-white/[0.02]">30 Under 30</div>
               {allResults.filter((r) => r.type === "watchlist").map((result) => {
