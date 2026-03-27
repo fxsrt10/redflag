@@ -112,7 +112,7 @@ export default function DashboardPage() {
                       )}
                     </div>
                     <div className="text-xs text-muted">
-                      {company.industry} · {formatNumber(company.employeeCount)} employees · {company.hqState}
+                      {company.industry ?? "—"} · {company.employeeCount ? formatNumber(company.employeeCount) : "—"} employees · {company.hqState ?? ""}
                     </div>
                   </div>
                 </div>
@@ -169,15 +169,15 @@ export default function DashboardPage() {
 
               {/* Right: Risk Score */}
               <div className="text-right ml-6 flex flex-col items-end gap-2">
-                <RiskBadge level={company.riskScore.riskLevel} score={company.riskScore.overall} />
+                <RiskBadge level={company.riskScore?.riskLevel ?? "moderate"} score={company.riskScore?.overall ?? 0} />
                 <div className="text-[10px] text-muted">
-                  Industry: P{company.riskScore.industryPercentile}
+                  {company.riskScore?.industryPercentile ? `Industry: P${company.riskScore.industryPercentile}` : ""}
                 </div>
                 {/* Mini risk bar */}
                 <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden mt-1">
                   <div
-                    className={cn("h-full rounded-full transition-all", getRiskBgSolid(company.riskScore.riskLevel))}
-                    style={{ width: `${company.riskScore.overall}%` }}
+                    className={cn("h-full rounded-full transition-all", getRiskBgSolid(company.riskScore?.riskLevel ?? "moderate"))}
+                    style={{ width: `${company.riskScore?.overall ?? 0}%` }}
                   />
                 </div>
               </div>
