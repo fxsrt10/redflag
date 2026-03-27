@@ -211,6 +211,81 @@ export interface LayoffEvent {
   warnFilingUrl?: string; // direct link to WARN filing if applicable
 }
 
+// --- Financial Data ---
+export interface FinancialSnapshot {
+  companyId: string;
+  snapshotDate: string;
+  stockPrice: number | null;
+  stockPrice30dAgo: number | null;
+  stockPrice90dAgo: number | null;
+  priceChange30dPct: number | null;
+  priceChange90dPct: number | null;
+  marketCap: number | null;
+  revenueQuarterly: number | null;
+  revenueTTM: number | null;
+  revenueGrowthYoYPct: number | null;
+  netIncomeQuarterly: number | null;
+  netIncomeTTM: number | null;
+  employeeCount: number | null;
+  employeeCountPrior: number | null;
+  employeeChangePct: number | null;
+  revenuePerEmployee: number | null;
+  debtToEquity: number | null;
+  currentRatio: number | null;
+  freeCashFlow: number | null;
+  source: "sec_edgar" | "fmp" | "alpha_vantage";
+  fetchedAt: string;
+}
+
+export interface FinancialSummary {
+  latestPrice: number | null;
+  priceChange30dPct: number | null;
+  priceChange90dPct: number | null;
+  marketCap: number | null;
+  revenueGrowthYoYPct: number | null;
+  employeeChangePct: number | null;
+  revenuePerEmployee: number | null;
+  debtToEquity: number | null;
+  freeCashFlow: number | null;
+  financialHealthSignal: "strong" | "stable" | "weakening" | "distressed";
+}
+
+// --- Layoff Predictions ---
+export interface LayoffPrediction {
+  companyId: string;
+  predictionDate: string;
+  probability: number;
+  riskTier: "very_low" | "low" | "moderate" | "high" | "very_high";
+  confidence: number;
+  timeHorizon: "30d" | "90d" | "180d";
+  signals: LayoffSignals;
+  topFactors: string[];
+}
+
+export interface LayoffSignals {
+  financialStress: number;
+  workforceContraction: number;
+  stockDecline: number;
+  sentimentDeterioration: number;
+  lawsuitAcceleration: number;
+  warnHistory: number;
+  newsSignal: number;
+  industryContagion: number;
+  executiveSignals: number;
+}
+
+// --- News ---
+export interface NewsItem {
+  id: string;
+  companyId: string;
+  publishedDate: string;
+  title: string;
+  source: string;
+  url: string;
+  sentiment: "positive" | "neutral" | "negative";
+  isLayoffRelated: boolean;
+}
+
 // --- Timeline ---
 export interface TimelineEvent {
   date: string;

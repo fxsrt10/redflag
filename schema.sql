@@ -251,6 +251,72 @@ CREATE TABLE compensation_summaries (
 );
 
 -- ============================================
+-- Financial Snapshots
+-- ============================================
+
+CREATE TABLE financial_snapshots (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id              UUID REFERENCES companies(id) ON DELETE CASCADE,
+    snapshot_date           DATE NOT NULL,
+    stock_price             NUMERIC(10,2),
+    stock_price_30d_ago     NUMERIC(10,2),
+    stock_price_90d_ago     NUMERIC(10,2),
+    price_change_30d_pct    NUMERIC(6,2),
+    price_change_90d_pct    NUMERIC(6,2),
+    market_cap              BIGINT,
+    revenue_quarterly       BIGINT,
+    revenue_ttm             BIGINT,
+    revenue_growth_yoy_pct  NUMERIC(6,2),
+    net_income_quarterly    BIGINT,
+    net_income_ttm          BIGINT,
+    employee_count          INT,
+    employee_count_prior    INT,
+    employee_change_pct     NUMERIC(6,2),
+    revenue_per_employee    INT,
+    debt_to_equity          NUMERIC(8,2),
+    current_ratio           NUMERIC(6,2),
+    free_cash_flow          BIGINT,
+    source                  TEXT,
+    raw_data                JSONB,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(company_id, snapshot_date, source)
+);
+
+-- ============================================
+-- Layoff Predictions
+-- ============================================
+
+CREATE TABLE layoff_predictions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id          UUID REFERENCES companies(id) ON DELETE CASCADE,
+    prediction_date     DATE NOT NULL,
+    probability         NUMERIC(4,3),
+    risk_tier           TEXT CHECK (risk_tier IN ('very_low','low','moderate','high','very_high')),
+    confidence          NUMERIC(4,3),
+    time_horizon        TEXT CHECK (time_horizon IN ('30d','90d','180d')),
+    signals             JSONB NOT NULL,
+    top_factors         TEXT[],
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(company_id, prediction_date, time_horizon)
+);
+
+-- ============================================
+-- News Items
+-- ============================================
+
+CREATE TABLE news_items (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id          UUID REFERENCES companies(id) ON DELETE CASCADE,
+    published_date      DATE,
+    title               TEXT NOT NULL,
+    source              TEXT,
+    url                 TEXT,
+    sentiment           TEXT CHECK (sentiment IN ('positive','neutral','negative')),
+    is_layoff_related   BOOLEAN DEFAULT false,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================
 -- Indexes
 -- ============================================
 
@@ -264,3 +330,7 @@ CREATE INDEX idx_founder_impact_date ON founder_impact_scores(founder_id, score_
 CREATE INDEX idx_forbes_year ON forbes_30u30(list_year);
 CREATE INDEX idx_comp_entries_company ON compensation_entries(company_id);
 CREATE INDEX idx_comp_summaries_company ON compensation_summaries(company_id, snapshot_date);
+CREATE INDEX idx_financial_company_date ON financial_snapshots(company_id, snapshot_date);
+CREATE INDEX idx_predictions_company_date ON layoff_predictions(company_id, prediction_date);
+CREATE INDEX idx_news_company_date ON news_items(company_id, published_date);
+CREATE INDEX idx_news_layoff ON news_items(company_id, is_layoff_related) WHERE is_layoff_related = true;
