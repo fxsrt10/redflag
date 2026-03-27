@@ -1,32 +1,49 @@
 "use client";
 
-import { useState } from "react";
-import { companies } from "@/data/mock";
+import { useState, useEffect } from "react";
+import { companies as staticCompanies } from "@/data/mock";
+import type { Company } from "@/types";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { StatCard } from "@/components/ui/StatCard";
 import { cn, getRiskColor, getRiskBgSolid, formatNumber } from "@/lib/utils";
 import Link from "next/link";
-import { Search, TrendingDown, Scale, AlertTriangle, Building2 } from "lucide-react";
+import { Search, TrendingDown, Scale, AlertTriangle, Building2, Loader2 } from "lucide-react";
 
 export default function DashboardPage() {
+  const [companies, setCompanies] = useState<Company[]>(staticCompanies);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"risk" | "lawsuits" | "sentiment" | "name">("risk");
+
+  useEffect(() => {
+    fetch("/api/companies?limit=200")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.companies && data.companies.length > 0) {
+          setCompanies(data.companies);
+        }
+      })
+      .catch(() => {
+        // Keep static data as fallback
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = companies
     .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.ticker?.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       switch (sortBy) {
-        case "risk": return b.riskScore.overall - a.riskScore.overall;
-        case "lawsuits": return b.lawsuits.filingsPerThousandEmployees - a.lawsuits.filingsPerThousandEmployees;
-        case "sentiment": return a.glassdoor.overall - b.glassdoor.overall;
+        case "risk": return (b.riskScore?.overall ?? 0) - (a.riskScore?.overall ?? 0);
+        case "lawsuits": return (b.lawsuits?.filingsPerThousandEmployees ?? 0) - (a.lawsuits?.filingsPerThousandEmployees ?? 0);
+        case "sentiment": return (a.glassdoor?.overall ?? 5) - (b.glassdoor?.overall ?? 5);
         case "name": return a.name.localeCompare(b.name);
         default: return 0;
       }
     });
 
-  const highRiskCount = companies.filter((c) => c.riskScore.riskLevel === "high").length;
-  const avgRisk = Math.round(companies.reduce((sum, c) => sum + c.riskScore.overall, 0) / companies.length);
-  const totalLawsuits = companies.reduce((sum, c) => sum + c.lawsuits.employmentFilings12mo, 0);
+  const highRiskCount = companies.filter((c) => c.riskScore?.riskLevel === "high").length;
+  const avgRisk = companies.length > 0 ? Math.round(companies.reduce((sum, c) => sum + (c.riskScore?.overall ?? 0), 0) / companies.length) : 0;
+  const totalLawsuits = companies.reduce((sum, c) => sum + (c.lawsuits?.employmentFilings12mo ?? 0), 0);
 
   return (
     <div>
@@ -105,40 +122,36 @@ export default function DashboardPage() {
                   <div>
                     <div className="text-[10px] text-muted uppercase tracking-wider">Glassdoor</div>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className="text-lg font-bold">{company.glassdoor.overall}</span>
-                      <span className="text-[10px] text-muted">/5.0</span>
-                      {company.glassdoor.trend === "declining" || company.glassdoor.trend === "rapidly_declining" ? (
+                      <span className="text-lg font-bold">{company.glassdoor?.overall || "—"}</span>
+                      {company.glassdoor?.overall ? <span className="text-[10px] text-muted">/5.0</span> : null}
+                      {(company.glassdoor?.trend === "declining" || company.glassdoor?.trend === "rapidly_declining") && (
                         <TrendingDown className="w-3 h-3 text-red-400" />
-                      ) : null}
+                      )}
                     </div>
                   </div>
                   <div>
                     <div className="text-[10px] text-muted uppercase tracking-wider">Leadership</div>
-                    <div className={cn("text-lg font-bold mt-1", company.glassdoor.leadership < 3.0 ? "text-red-400" : "")}>
-                      {company.glassdoor.leadership}
+                    <div className={cn("text-lg font-bold mt-1", (company.glassdoor?.leadership ?? 5) < 3.0 ? "text-red-400" : "")}>
+                      {company.glassdoor?.leadership || "—"}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-muted uppercase tracking-wider">Lawsuits / 1K emp</div>
-                    <div className={cn("text-lg font-bold mt-1", company.lawsuits.filingsPerThousandEmployees > 1 ? "text-red-400" : "")}>
-                      {company.lawsuits.filingsPerThousandEmployees.toFixed(2)}
+                    <div className="text-[10px] text-muted uppercase tracking-wider">Risk Score</div>
+                    <div className={cn("text-lg font-bold mt-1", getRiskColor(company.riskScore?.riskLevel ?? "moderate"))}>
+                      {company.riskScore?.overall ?? "—"}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-muted uppercase tracking-wider">Filing Trend</div>
+                    <div className="text-[10px] text-muted uppercase tracking-wider">Employees</div>
+                    <div className="text-lg font-bold mt-1">
+                      {company.employeeCount ? formatNumber(company.employeeCount) : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted uppercase tracking-wider">Industry</div>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className={cn("text-lg font-bold", company.lawsuits.filingAcceleration > 1.3 ? "text-red-400" : company.lawsuits.filingAcceleration < 1 ? "text-emerald-400" : "")}>
-                        {company.lawsuits.filingAcceleration > 1 ? "+" : ""}{((company.lawsuits.filingAcceleration - 1) * 100).toFixed(0)}%
-                      </span>
-                      {company.lawsuits.filingAcceleration > 1.3 && <AlertTriangle className="w-3 h-3 text-red-400" />}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-muted uppercase tracking-wider">Top Category</div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Scale className="w-3 h-3 text-muted" />
-                      <span className="text-sm font-medium capitalize">
-                        {company.lawsuits.topCategories[0]?.category.replace("_", " ") ?? "—"}
+                      <span className="text-sm font-medium">
+                        {company.industry?.split("/")[0]?.trim() ?? "—"}
                       </span>
                     </div>
                   </div>
@@ -146,7 +159,7 @@ export default function DashboardPage() {
 
                 {/* Category Tags */}
                 <div className="flex gap-1.5 mt-3">
-                  {company.lawsuits.topCategories.map((cat) => (
+                  {(company.lawsuits?.topCategories ?? []).map((cat) => (
                     <span key={cat.category} className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-muted capitalize">
                       {cat.category.replace("_", " ")} ({cat.count})
                     </span>
