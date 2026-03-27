@@ -3,8 +3,7 @@
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { getCompanyById, getFoundersByCompany, getPeerCompanies, getCompensationByCompany } from "@/lib/data";
-import { getLayoffsByCompany, getLayoffSummary } from "@/data/layoffs";
+import { getFoundersByCompany, getPeerCompanies, getCompensationByCompany } from "@/lib/data";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { StatCard } from "@/components/ui/StatCard";
 import { ShareCard } from "@/components/ui/ShareCard";
@@ -22,15 +21,18 @@ export default function CompanyDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const [company, setCompany] = useState<Company | null>(null);
+  const [warnNotices, setWarnNotices] = useState<Array<{ id: string; state: string; noticeDate: string; effectiveDate: string; employeesAffected: number; reason: string; sourceUrl: string | null }>>([]);
+  const [newsItems, setNewsItems] = useState<Array<{ id: string; publishedDate: string; title: string; source: string; url: string; sentiment: string; isLayoffRelated: boolean }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Always fetch from API — single source of truth
     fetch(`/api/companies/${id}`)
       .then((r) => r.json())
       .then((data) => {
         if (data && data.name) {
           setCompany(data);
+          setWarnNotices(data.warnNotices ?? []);
+          setNewsItems(data.news ?? []);
         }
       })
       .catch(() => {})
@@ -59,8 +61,16 @@ export default function CompanyDetailPage() {
   const relatedFounders = getFoundersByCompany(company.name);
   const peers = getPeerCompanies(company);
   const compEntries = getCompensationByCompany(company.id);
-  const layoffs = getLayoffsByCompany(company.id);
-  const layoffSummary = getLayoffSummary(company.id);
+
+  // Layoff data from API (warn_notices table)
+  const layoffs = warnNotices.sort((a, b) => new Date(b.noticeDate).getTime() - new Date(a.noticeDate).getTime());
+  const layoffSummary = {
+    eventCount: layoffs.length,
+    totalAffected: layoffs.reduce((sum, e) => sum + (e.employeesAffected ?? 0), 0),
+    totalPctCut: 0, // Can't compute without knowing workforce at time of each event
+    mostRecent: layoffs[0] ?? null,
+  };
+
   const trend = getTrendInfo(company.glassdoor?.trend ?? "stable");
 
   return (
@@ -256,7 +266,7 @@ export default function CompanyDetailPage() {
           </h2>
 
           {/* Summary Stats */}
-          <div className="grid grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-3 gap-3 mb-6">
             <StatCard label="Layoff Events" value={layoffSummary.eventCount} />
             <StatCard
               label="Total Affected"
@@ -264,13 +274,8 @@ export default function CompanyDetailPage() {
               subValue="employees across all events"
             />
             <StatCard
-              label="Cumulative % Cut"
-              value={`${layoffSummary.totalPctCut.toFixed(0)}%`}
-              trend={layoffSummary.totalPctCut > 20 ? "up" : undefined}
-            />
-            <StatCard
               label="Most Recent"
-              value={layoffSummary.mostRecent?.date.slice(0, 7) ?? "—"}
+              value={layoffSummary.mostRecent?.noticeDate?.slice(0, 10) ?? "—"}
               subValue={layoffSummary.mostRecent ? `${formatNumber(layoffSummary.mostRecent.employeesAffected)} affected` : undefined}
             />
           </div>
@@ -282,25 +287,19 @@ export default function CompanyDetailPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-xs font-medium">{event.date}</span>
-                      <span className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded capitalize",
-                        event.type === "layoff" ? "bg-red-500/10 text-red-400" :
-                        event.type === "warn_act" ? "bg-orange-500/10 text-orange-400" :
-                        event.type === "restructuring" ? "bg-yellow-500/10 text-yellow-400" :
-                        "bg-blue-500/10 text-blue-400"
-                      )}>
-                        {event.type.replace("_", " ")}
+                      <span className="text-xs font-medium">{event.noticeDate?.slice(0, 10)}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                        layoff
                       </span>
                       {event.employeesAffected > 0 && (
                         <span className="text-[10px] text-red-400 font-medium">
-                          {formatNumber(event.employeesAffected)} employees ({event.percentOfWorkforce}%)
+                          {formatNumber(event.employeesAffected)} employees
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-muted/80 leading-relaxed mb-2">{event.reason}</p>
                     <div className="flex items-center gap-3 text-[10px]">
-                      {isSafeUrl(event.sourceUrl) && (
+                      {event.sourceUrl && isSafeUrl(event.sourceUrl) && (
                         <a
                           href={event.sourceUrl}
                           target="_blank"
@@ -308,35 +307,24 @@ export default function CompanyDetailPage() {
                           className="flex items-center gap-1 text-blue-400 hover:underline"
                         >
                           <Newspaper className="w-2.5 h-2.5" />
-                          {event.source}
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      )}
-                      {event.warnFilingUrl && isSafeUrl(event.warnFilingUrl) && (
-                        <a
-                          href={event.warnFilingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-orange-400 hover:underline"
-                        >
-                          WARN Filing <ExternalLink className="w-2.5 h-2.5" />
+                          Source <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       )}
                     </div>
                   </div>
                   {/* Visual impact bar */}
                   <div className="ml-4 flex flex-col items-end">
-                    <div className="text-[10px] text-muted mb-1">Impact</div>
+                    <div className="text-[10px] text-muted mb-1">{event.state}</div>
                     <div className="w-20 h-2 bg-white/5 rounded-full overflow-hidden">
                       <div
                         className={cn(
                           "h-full rounded-full",
-                          event.percentOfWorkforce >= 20 ? "bg-red-500" :
-                          event.percentOfWorkforce >= 10 ? "bg-orange-500" :
-                          event.percentOfWorkforce >= 5 ? "bg-yellow-500" :
+                          event.employeesAffected >= 10000 ? "bg-red-500" :
+                          event.employeesAffected >= 1000 ? "bg-orange-500" :
+                          event.employeesAffected >= 100 ? "bg-yellow-500" :
                           "bg-white/20"
                         )}
-                        style={{ width: `${Math.min(event.percentOfWorkforce * 4, 100)}%` }}
+                        style={{ width: `${Math.min((event.employeesAffected / 20000) * 100, 100)}%` }}
                       />
                     </div>
                   </div>
