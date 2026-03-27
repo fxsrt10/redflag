@@ -9,7 +9,7 @@ import { ArrowLeftRight, ChevronDown, X } from "lucide-react";
 
 function CompareContent() {
   const searchParams = useSearchParams();
-  const initialIds = searchParams.get("ids")?.split(",") ?? [];
+  const initialIds = (searchParams.get("ids")?.split(",") ?? []).slice(0, 3);
 
   const [selectedIds, setSelectedIds] = useState<string[]>(
     initialIds.length > 0 ? initialIds.filter((id) => companies.some((c) => c.id === id)) : []

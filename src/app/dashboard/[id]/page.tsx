@@ -10,7 +10,7 @@ import { ShareCard } from "@/components/ui/ShareCard";
 import { GlassdoorRadar } from "@/components/charts/GlassdoorRadar";
 import { LawsuitCategoryChart } from "@/components/charts/LawsuitCategoryChart";
 import { RiskBreakdownBars } from "@/components/charts/RiskBreakdownBars";
-import { cn, getRiskColor, getRiskBgSolid, formatCurrency, formatNumber, getCategoryBg, getTrendInfo } from "@/lib/utils";
+import { cn, getRiskColor, getRiskBgSolid, formatCurrency, formatNumber, getCategoryBg, getTrendInfo, safeWebsiteHref, isSafeUrl } from "@/lib/utils";
 import {
   ArrowLeft, Building2, ExternalLink, Scale, Users, TrendingDown,
   AlertTriangle, Globe, MapPin, Briefcase, Star, Scissors, Newspaper,
@@ -25,7 +25,7 @@ export default function CompanyDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <h1 className="text-2xl font-bold mb-2">Company not found</h1>
-        <p className="text-muted mb-4">No data for &quot;{id}&quot;</p>
+        <p className="text-muted mb-4">No matching company found.</p>
         <Link href="/dashboard" className="text-red-400 hover:underline">Back to dashboard</Link>
       </div>
     );
@@ -73,7 +73,7 @@ export default function CompanyDetailPage() {
                 <span className="flex items-center gap-1"><Briefcase className="w-3 h-3" /> {company.industry}</span>
                 <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {formatNumber(company.employeeCount)} employees</span>
                 <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {company.hqState}</span>
-                <a href={`https://${company.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-white">
+                <a href={safeWebsiteHref(company.website)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-white">
                   <Globe className="w-3 h-3" /> {company.website}
                 </a>
               </div>
@@ -190,7 +190,7 @@ export default function CompanyDetailPage() {
                       <span>{lawsuit.caseNumber} · {lawsuit.court}</span>
                       <div className="flex items-center gap-2">
                         <span>{lawsuit.filedDate}</span>
-                        {lawsuit.sourceUrl ? (
+                        {lawsuit.sourceUrl && isSafeUrl(lawsuit.sourceUrl) ? (
                           <a href={lawsuit.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-blue-400 hover:underline">
                             Source <ExternalLink className="w-2.5 h-2.5" />
                           </a>
@@ -275,17 +275,19 @@ export default function CompanyDetailPage() {
                     </div>
                     <p className="text-xs text-muted/80 leading-relaxed mb-2">{event.reason}</p>
                     <div className="flex items-center gap-3 text-[10px]">
-                      <a
-                        href={event.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-blue-400 hover:underline"
-                      >
-                        <Newspaper className="w-2.5 h-2.5" />
-                        {event.source}
-                        <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                      {event.warnFilingUrl && (
+                      {isSafeUrl(event.sourceUrl) && (
+                        <a
+                          href={event.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-blue-400 hover:underline"
+                        >
+                          <Newspaper className="w-2.5 h-2.5" />
+                          {event.source}
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                      {event.warnFilingUrl && isSafeUrl(event.warnFilingUrl) && (
                         <a
                           href={event.warnFilingUrl}
                           target="_blank"

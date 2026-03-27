@@ -100,3 +100,21 @@ export function getScoreLevel(score: number): "low" | "moderate" | "elevated" | 
   if (score >= 30) return "moderate";
   return "low";
 }
+
+export function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+export function safeWebsiteHref(website: string): string {
+  try {
+    const url = new URL(`https://${website}`);
+    return `https://${url.hostname}`;
+  } catch {
+    return "#";
+  }
+}
