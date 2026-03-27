@@ -52,7 +52,7 @@ const SIC_TO_INDUSTRY: Record<string, string> = {
   "5912": "Pharma", "6324": "Healthcare",
   "3711": "Automotive", "3714": "Automotive",
   "3721": "Aerospace", "3812": "Aerospace", "3760": "Aerospace",
-  "5311": "Retail", "5331": "Retail", "5411": "Retail", "5912": "Retail",
+  "5311": "Retail", "5331": "Retail", "5411": "Retail", "5944": "Retail",
   "7812": "Entertainment", "7819": "Entertainment",
   "3559": "Industrial", "3523": "Industrial", "3699": "Industrial",
 };
