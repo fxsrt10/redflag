@@ -1,32 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { companies } from "@/data/mock";
+import { companies as staticCompanies } from "@/data/mock";
+import type { Company } from "@/types";
 import { cn, getRiskColor, getRiskBg, formatCurrency, formatNumber } from "@/lib/utils";
 import { Trophy, ArrowUpDown } from "lucide-react";
 
 type MetricKey = "risk" | "glassdoor" | "lawsuits" | "comp" | "leadership" | "worklife";
 
-const METRICS: { key: MetricKey; label: string; getValue: (c: typeof companies[0]) => number; format: (v: number) => string; direction: "asc" | "desc" }[] = [
-  { key: "risk", label: "Riskiest Employers", getValue: (c) => c.riskScore.overall, format: (v) => v.toString(), direction: "desc" },
-  { key: "glassdoor", label: "Best Glassdoor", getValue: (c) => c.glassdoor.overall, format: (v) => v.toFixed(1), direction: "desc" },
-  { key: "lawsuits", label: "Most Lawsuits / Employee", getValue: (c) => c.lawsuits.filingsPerThousandEmployees, format: (v) => v.toFixed(2), direction: "desc" },
+const METRICS: { key: MetricKey; label: string; getValue: (c: Company) => number; format: (v: number) => string; direction: "asc" | "desc" }[] = [
+  { key: "risk", label: "Riskiest Employers", getValue: (c) => c.riskScore?.overall ?? 0, format: (v) => v.toString(), direction: "desc" },
+  { key: "glassdoor", label: "Best Glassdoor", getValue: (c) => c.glassdoor?.overall ?? 0, format: (v) => v.toFixed(1), direction: "desc" },
+  { key: "lawsuits", label: "Most Lawsuits / Employee", getValue: (c) => c.lawsuits?.filingsPerThousandEmployees ?? 0, format: (v) => v.toFixed(2), direction: "desc" },
   { key: "comp", label: "Highest Compensation", getValue: (c) => c.compensation?.medianTotalComp ?? 0, format: (v) => formatCurrency(v), direction: "desc" },
-  { key: "leadership", label: "Worst Leadership", getValue: (c) => c.glassdoor.leadership, format: (v) => v.toFixed(1), direction: "asc" },
-  { key: "worklife", label: "Worst Work-Life Balance", getValue: (c) => c.glassdoor.workLife, format: (v) => v.toFixed(1), direction: "asc" },
+  { key: "leadership", label: "Worst Leadership", getValue: (c) => c.glassdoor?.leadership ?? 5, format: (v) => v.toFixed(1), direction: "asc" },
+  { key: "worklife", label: "Worst Work-Life Balance", getValue: (c) => c.glassdoor?.workLife ?? 5, format: (v) => v.toFixed(1), direction: "asc" },
 ];
 
 export default function LeaderboardsPage() {
+  const [companies, setCompanies] = useState<Company[]>(staticCompanies);
   const [metric, setMetric] = useState<MetricKey>("risk");
   const [industryFilter, setIndustryFilter] = useState("all");
 
+  useEffect(() => {
+    fetch("/api/companies?limit=200")
+      .then((r) => r.json())
+      .then((data) => { if (data.companies?.length > 0) setCompanies(data.companies); })
+      .catch(() => {});
+  }, []);
+
   const currentMetric = METRICS.find((m) => m.key === metric)!;
-  const industries = [...new Set(companies.map((c) => c.industry.split("/")[0].trim()))].sort();
+  const industries = [...new Set(companies.map((c) => c.industry?.split("/")[0]?.trim() ?? "Other"))].sort();
 
   const filtered = industryFilter === "all"
     ? companies
-    : companies.filter((c) => c.industry.includes(industryFilter));
+    : companies.filter((c) => c.industry?.includes(industryFilter));
 
   const sorted = [...filtered].sort((a, b) => {
     const aVal = currentMetric.getValue(a);

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { companies } from "@/data/mock";
+import { useState, useEffect } from "react";
+import { companies as staticCompanies } from "@/data/mock";
+import type { Company } from "@/types";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { StatCard } from "@/components/ui/StatCard";
 import { cn, getRiskColor, getRiskBg, formatCurrency, getTrendInfo } from "@/lib/utils";
@@ -18,6 +19,7 @@ function getVerdict(riskScore: number, compPercentile: number, glassdoor: number
 
 export default function EvaluatePage() {
   const [companyId, setCompanyId] = useState("");
+  const [companies, setCompanies] = useState<Company[]>(staticCompanies);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [base, setBase] = useState("");
@@ -25,6 +27,13 @@ export default function EvaluatePage() {
   const [bonus, setBonus] = useState("");
   const [level, setLevel] = useState("");
   const [evaluated, setEvaluated] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/companies?limit=200")
+      .then((r) => r.json())
+      .then((data) => { if (data.companies?.length > 0) setCompanies(data.companies); })
+      .catch(() => {});
+  }, []);
 
   const company = companies.find((c) => c.id === companyId);
   const totalOffer = (parseInt(base) || 0) + (parseInt(stock) || 0) + (parseInt(bonus) || 0);

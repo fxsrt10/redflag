@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { companies } from "@/data/mock";
+import { companies as staticCompanies } from "@/data/mock";
+import type { Company } from "@/types";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { cn, getRiskColor, formatCurrency, formatNumber, getRiskBgSolid } from "@/lib/utils";
 import { ArrowLeftRight, ChevronDown, X } from "lucide-react";
@@ -11,10 +12,23 @@ function CompareContent() {
   const searchParams = useSearchParams();
   const initialIds = (searchParams.get("ids")?.split(",") ?? []).slice(0, 3);
 
-  const [selectedIds, setSelectedIds] = useState<string[]>(
-    initialIds.length > 0 ? initialIds.filter((id) => companies.some((c) => c.id === id)) : []
-  );
+  const [companies, setCompanies] = useState<Company[]>(staticCompanies);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/companies?limit=200")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.companies?.length > 0) {
+          setCompanies(data.companies);
+          if (initialIds.length > 0) {
+            setSelectedIds(initialIds.filter((id: string) => data.companies.some((c: Company) => c.id === id)));
+          }
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = selectedIds.map((id) => companies.find((c) => c.id === id)!).filter(Boolean);
 
@@ -34,18 +48,18 @@ function CompareContent() {
   };
 
   const metrics = [
-    { label: "Risk Score", getValue: (c: typeof selected[0]) => c.riskScore.overall, format: (v: number) => v.toString(), color: (c: typeof selected[0]) => getRiskColor(c.riskScore.riskLevel), higher: "worse" },
-    { label: "Glassdoor Overall", getValue: (c: typeof selected[0]) => c.glassdoor.overall, format: (v: number) => v.toFixed(1), color: () => "", higher: "better" },
-    { label: "Leadership Rating", getValue: (c: typeof selected[0]) => c.glassdoor.leadership, format: (v: number) => v.toFixed(1), color: () => "", higher: "better" },
-    { label: "Culture Rating", getValue: (c: typeof selected[0]) => c.glassdoor.culture, format: (v: number) => v.toFixed(1), color: () => "", higher: "better" },
-    { label: "Work-Life Balance", getValue: (c: typeof selected[0]) => c.glassdoor.workLife, format: (v: number) => v.toFixed(1), color: () => "", higher: "better" },
-    { label: "Lawsuits / 1K Emp", getValue: (c: typeof selected[0]) => c.lawsuits.filingsPerThousandEmployees, format: (v: number) => v.toFixed(2), color: () => "", higher: "worse" },
-    { label: "Filing Acceleration", getValue: (c: typeof selected[0]) => c.lawsuits.filingAcceleration, format: (v: number) => `${v > 1 ? "+" : ""}${((v - 1) * 100).toFixed(0)}%`, color: () => "", higher: "worse" },
-    { label: "Employee Count", getValue: (c: typeof selected[0]) => c.employeeCount, format: (v: number) => formatNumber(v), color: () => "", higher: "neutral" },
-    { label: "Median Total Comp", getValue: (c: typeof selected[0]) => c.compensation?.medianTotalComp ?? 0, format: (v: number) => formatCurrency(v), color: () => "", higher: "better" },
-    { label: "Comp vs Peers", getValue: (c: typeof selected[0]) => c.compensation?.compVsPeers ?? 0, format: (v: number) => `P${v}`, color: () => "", higher: "better" },
-    { label: "Recommend %", getValue: (c: typeof selected[0]) => c.glassdoor.recommendPct, format: (v: number) => `${v}%`, color: () => "", higher: "better" },
-    { label: "CEO Approval", getValue: (c: typeof selected[0]) => c.glassdoor.ceoApprovalPct, format: (v: number) => `${v}%`, color: () => "", higher: "better" },
+    { label: "Risk Score", getValue: (c: Company) => c.riskScore?.overall ?? 0, format: (v: number) => v.toString(), color: (c: Company) => getRiskColor(c.riskScore?.riskLevel ?? "moderate"), higher: "worse" },
+    { label: "Glassdoor Overall", getValue: (c: Company) => c.glassdoor?.overall ?? 0, format: (v: number) => v.toFixed(1), color: () => "", higher: "better" },
+    { label: "Leadership Rating", getValue: (c: Company) => c.glassdoor?.leadership ?? 0, format: (v: number) => v.toFixed(1), color: () => "", higher: "better" },
+    { label: "Culture Rating", getValue: (c: Company) => c.glassdoor?.culture ?? 0, format: (v: number) => v.toFixed(1), color: () => "", higher: "better" },
+    { label: "Work-Life Balance", getValue: (c: Company) => c.glassdoor?.workLife ?? 0, format: (v: number) => v.toFixed(1), color: () => "", higher: "better" },
+    { label: "Lawsuits / 1K Emp", getValue: (c: Company) => c.lawsuits?.filingsPerThousandEmployees ?? 0, format: (v: number) => v.toFixed(2), color: () => "", higher: "worse" },
+    { label: "Filing Acceleration", getValue: (c: Company) => c.lawsuits?.filingAcceleration ?? 1, format: (v: number) => `${v > 1 ? "+" : ""}${((v - 1) * 100).toFixed(0)}%`, color: () => "", higher: "worse" },
+    { label: "Employee Count", getValue: (c: Company) => c.employeeCount ?? 0, format: (v: number) => formatNumber(v), color: () => "", higher: "neutral" },
+    { label: "Median Total Comp", getValue: (c: Company) => c.compensation?.medianTotalComp ?? 0, format: (v: number) => formatCurrency(v), color: () => "", higher: "better" },
+    { label: "Comp vs Peers", getValue: (c: Company) => c.compensation?.compVsPeers ?? 0, format: (v: number) => `P${v}`, color: () => "", higher: "better" },
+    { label: "Recommend %", getValue: (c: Company) => c.glassdoor?.recommendPct ?? 0, format: (v: number) => `${v}%`, color: () => "", higher: "better" },
+    { label: "CEO Approval", getValue: (c: Company) => c.glassdoor?.ceoApprovalPct ?? 0, format: (v: number) => `${v}%`, color: () => "", higher: "better" },
   ];
 
   const getBestIndex = (values: number[], direction: string) => {

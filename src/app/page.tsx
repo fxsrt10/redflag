@@ -67,37 +67,35 @@ const SPOTLIGHT_COMPANIES = [
 
 export default function Home() {
   return (
-    <div className="min-h-screen -ml-64">
-      {/* Hero */}
-      <section className="flex flex-col items-center justify-center min-h-[70vh] px-8 relative overflow-hidden">
-        {/* Background glow */}
+    <div className="min-h-screen">
+      {/* Hero — compact, no wasted space */}
+      <section className="flex flex-col items-center justify-center py-12 px-8 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-transparent" />
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-500/5 rounded-full blur-3xl" />
 
         <div className="relative text-center max-w-3xl">
-          <div className="w-16 h-16 bg-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-red-500/20">
-            <Flag className="w-8 h-8 text-white" />
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center shadow-lg shadow-red-500/20">
+              <Flag className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight">
+              Red<span className="text-red-500">Flag</span>
+            </h1>
           </div>
-          <h1 className="text-6xl font-bold tracking-tight mb-4">
-            Red<span className="text-red-500">Flag</span>
-          </h1>
-          <p className="text-xl text-muted mb-3">Workplace Risk Intelligence</p>
-          <p className="text-base text-muted/60 mb-8 max-w-lg mx-auto leading-relaxed">
+          <p className="text-base text-muted/60 mb-6 max-w-md mx-auto leading-relaxed">
             See the lawsuits. Track the layoffs. Know the risk.
-            <br />
-            <span className="text-foreground/80">Before you accept the offer.</span>
+            <span className="text-foreground/80"> Before you accept the offer.</span>
           </p>
 
-          <div className="flex items-center justify-center gap-4 mb-6">
+          <div className="flex items-center justify-center gap-3 mb-4">
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 px-6 py-3 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+              className="flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
             >
               Explore Companies <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
               href="/evaluate"
-              className="flex items-center gap-2 px-6 py-3 bg-card border border-card-border text-foreground rounded-xl font-medium text-sm hover:border-red-500/30 transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 bg-card border border-card-border text-foreground rounded-lg font-medium text-sm hover:border-red-500/30 transition-all"
             >
               Evaluate an Offer <FileCheck className="w-4 h-4 text-red-400" />
             </Link>
@@ -110,8 +108,8 @@ export default function Home() {
       </section>
 
       {/* Stats Bar */}
-      <section className="border-y border-card-border bg-card/50 py-6 px-8">
-        <div className="max-w-5xl mx-auto grid grid-cols-4 gap-8">
+      <section className="border-y border-card-border bg-card/50 py-5 px-8">
+        <div className="grid grid-cols-4 gap-6">
           {STATS.map((stat) => (
             <div key={stat.label} className="flex items-center gap-3">
               <stat.icon className="w-5 h-5 text-red-400" />
@@ -125,11 +123,11 @@ export default function Home() {
       </section>
 
       {/* Spotlight: Riskiest Companies */}
-      <section className="py-12 px-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
+      <section className="py-8 px-8">
+        <div>
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <h2 className="text-2xl font-bold flex items-center gap-2">
+              <h2 className="text-xl font-bold flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-400" /> Highest Risk Right Now
               </h2>
               <p className="text-sm text-muted mt-1">Companies with the most elevated workplace risk signals</p>
@@ -155,9 +153,9 @@ export default function Home() {
       </section>
 
       {/* Features Grid */}
-      <section className="py-12 px-8 border-t border-card-border">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-2xl font-bold mb-2">What You Can Do</h2>
+      <section className="py-8 px-8 border-t border-card-border">
+        <div>
+          <h2 className="text-xl font-bold mb-2">What You Can Do</h2>
           <p className="text-sm text-muted mb-8">Seven tools to help you understand workplace risk before it&apos;s too late.</p>
 
           <div className="grid grid-cols-2 gap-4">
@@ -184,8 +182,8 @@ export default function Home() {
       </section>
 
       {/* CTA */}
-      <section className="py-16 px-8 border-t border-card-border">
-        <div className="max-w-2xl mx-auto text-center">
+      <section className="py-12 px-8 border-t border-card-border">
+        <div className="text-center">
           <h2 className="text-2xl font-bold mb-3">Got a job offer?</h2>
           <p className="text-muted mb-6">Check the company&apos;s risk score before you sign. It&apos;s free.</p>
           <Link

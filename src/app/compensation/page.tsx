@@ -1,13 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import { riskRewardData, companies } from "@/data/mock";
+import { useState, useEffect } from "react";
+import { riskRewardData as staticRiskRewardData, companies as staticCompanies } from "@/data/mock";
+import type { Company } from "@/types";
 import { StatCard } from "@/components/ui/StatCard";
 import { cn, getRiskColor, getRiskBgSolid, formatCurrency, getRiskBg } from "@/lib/utils";
 import { DollarSign, TrendingUp, AlertTriangle, ArrowUpDown } from "lucide-react";
 
 export default function CompensationPage() {
+  const [companies, setCompanies] = useState<Company[]>(staticCompanies);
   const [sortBy, setSortBy] = useState<"comp" | "risk" | "ratio" | "glassdoor">("ratio");
+
+  useEffect(() => {
+    fetch("/api/companies?limit=200")
+      .then((r) => r.json())
+      .then((data) => { if (data.companies?.length > 0) setCompanies(data.companies); })
+      .catch(() => {});
+  }, []);
+
+  const riskRewardData = companies.map((c) => ({
+    companyId: c.id,
+    companyName: c.name,
+    ticker: c.ticker,
+    riskScore: c.riskScore?.overall ?? 0,
+    riskLevel: c.riskScore?.riskLevel ?? ("moderate" as const),
+    medianTotalComp: c.compensation?.medianTotalComp ?? 0,
+    glassdoorOverall: c.glassdoor?.overall ?? 0,
+    industry: c.industry ?? "",
+    sizeBucket: c.sizeBucket ?? "",
+    employeeCount: c.employeeCount ?? 0,
+  }));
 
   const dataWithRatio = riskRewardData.map((d) => ({
     ...d,
