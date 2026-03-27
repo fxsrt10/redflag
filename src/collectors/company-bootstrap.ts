@@ -1,12 +1,12 @@
 // ============================================
 // RedFlag — Company Bootstrap Collector
+// Uses SEC EDGAR (free, unlimited) as primary data source
 // ============================================
 
 import { getPool, closePool } from "./db";
-import { fetchFmpData } from "./fmp-financials";
 
 // ---------------------------------------------------------------------------
-// Default tickers (100+ across industries)
+// Default tickers (89 across 10 industries)
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_TICKERS: string[] = [
@@ -39,47 +39,129 @@ export const DEFAULT_TICKERS: string[] = [
   "T", "VZ", "TMUS",
 ];
 
+// SEC EDGAR industry code -> RedFlag industry mapping
+const SIC_TO_INDUSTRY: Record<string, string> = {
+  "7372": "Tech", "7371": "Tech", "7374": "Tech", "7379": "Tech",
+  "3674": "Tech / Semiconductors", "3672": "Tech / Semiconductors",
+  "5961": "Tech", "5045": "Tech", "5734": "Tech",
+  "4813": "Telecom", "4812": "Telecom", "4899": "Telecom",
+  "6022": "Finance", "6020": "Finance", "6021": "Finance",
+  "6199": "Finance", "6211": "Finance", "6282": "Finance",
+  "1311": "Energy", "2911": "Energy", "1381": "Energy", "1382": "Energy",
+  "2834": "Pharma", "2836": "Pharma", "2835": "Pharma",
+  "5912": "Pharma", "6324": "Healthcare",
+  "3711": "Automotive", "3714": "Automotive",
+  "3721": "Aerospace", "3812": "Aerospace", "3760": "Aerospace",
+  "5311": "Retail", "5331": "Retail", "5411": "Retail", "5912": "Retail",
+  "7812": "Entertainment", "7819": "Entertainment",
+  "3559": "Industrial", "3523": "Industrial", "3699": "Industrial",
+};
+
 // ---------------------------------------------------------------------------
-// Types
+// SEC EDGAR: fetch company tickers file (maps ticker -> CIK + name)
 // ---------------------------------------------------------------------------
 
-interface BootstrapResult {
+interface EdgarTickerEntry {
+  cik_str: number;
   ticker: string;
-  success: boolean;
-  error?: string;
+  title: string;
+}
+
+let tickerMap: Record<string, EdgarTickerEntry> | null = null;
+
+async function getEdgarTickerMap(): Promise<Record<string, EdgarTickerEntry>> {
+  if (tickerMap) return tickerMap;
+
+  console.log("[bootstrap] Fetching SEC EDGAR ticker map...");
+  const res = await fetch("https://www.sec.gov/files/company_tickers.json", {
+    headers: { "User-Agent": "RedFlag/1.0 contact@redflag.app" },
+  });
+
+  if (!res.ok) throw new Error(`EDGAR ticker fetch failed: ${res.status}`);
+
+  const data = (await res.json()) as Record<string, EdgarTickerEntry>;
+  tickerMap = {};
+  for (const entry of Object.values(data)) {
+    tickerMap[entry.ticker.toUpperCase()] = entry;
+  }
+  console.log(`[bootstrap] Loaded ${Object.keys(tickerMap).length} tickers from EDGAR`);
+  return tickerMap;
 }
 
 // ---------------------------------------------------------------------------
-// SEC CIK lookup
+// SEC EDGAR: fetch company facts (employees, revenue, etc.)
 // ---------------------------------------------------------------------------
 
-async function lookupCik(ticker: string): Promise<string | null> {
+interface CompanyFacts {
+  entityName: string;
+  cik: number;
+  facts?: {
+    dei?: Record<string, { units: Record<string, Array<{ val: number; end: string; form: string }>> }>;
+    "us-gaap"?: Record<string, { units: Record<string, Array<{ val: number; end: string; form: string }>> }>;
+  };
+}
+
+async function fetchCompanyFacts(cik: number): Promise<CompanyFacts | null> {
+  const paddedCik = String(cik).padStart(10, "0");
+  const url = `https://data.sec.gov/api/xbrl/companyfacts/CIK${paddedCik}.json`;
+
   try {
-    const url = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(ticker)}&dateRange=custom`;
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "RedFlag/1.0 contact@redflag.app",
-        Accept: "application/json",
-      },
+    const res = await fetch(url, {
+      headers: { "User-Agent": "RedFlag/1.0 contact@redflag.app" },
     });
+    if (!res.ok) return null;
+    return (await res.json()) as CompanyFacts;
+  } catch {
+    return null;
+  }
+}
 
-    if (!response.ok) return null;
+function getLatestFact(facts: CompanyFacts, namespace: string, concept: string): number | null {
+  const ns = namespace === "dei" ? facts.facts?.dei : facts.facts?.["us-gaap"];
+  if (!ns?.[concept]) return null;
 
-    const data = await response.json() as {
-      hits?: {
-        hits?: Array<{
-          _source?: { entity_id?: string };
-        }>;
-      };
-    };
+  const units = ns[concept].units;
+  const entries = units["USD"] || units["pure"] || Object.values(units)[0];
+  if (!entries || entries.length === 0) return null;
 
-    const entityId = data.hits?.hits?.[0]?._source?.entity_id;
-    return entityId ?? null;
-  } catch (err) {
-    console.warn(
-      `[bootstrap] CIK lookup failed for ${ticker}:`,
-      (err as Error).message
-    );
+  // Get the most recent 10-K or 10-Q filing
+  const sorted = [...entries]
+    .filter((e) => e.form === "10-K" || e.form === "10-Q")
+    .sort((a, b) => b.end.localeCompare(a.end));
+
+  return sorted[0]?.val ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// SEC EDGAR: fetch company submissions (SIC code, addresses)
+// ---------------------------------------------------------------------------
+
+interface CompanySubmissions {
+  name: string;
+  cik: number;
+  sic: string;
+  sicDescription: string;
+  stateOfIncorporation: string;
+  addresses: {
+    business: { stateOrCountry: string; city: string };
+    mailing: { stateOrCountry: string; city: string };
+  };
+  website?: string;
+  exchanges: string[];
+  tickers: string[];
+}
+
+async function fetchCompanySubmissions(cik: number): Promise<CompanySubmissions | null> {
+  const paddedCik = String(cik).padStart(10, "0");
+  const url = `https://data.sec.gov/submissions/CIK${paddedCik}.json`;
+
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "RedFlag/1.0 contact@redflag.app" },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as CompanySubmissions;
+  } catch {
     return null;
   }
 }
@@ -88,9 +170,7 @@ async function lookupCik(ticker: string): Promise<string | null> {
 // Size bucket determination
 // ---------------------------------------------------------------------------
 
-function getSizeBucket(
-  employeeCount: number
-): "micro" | "small" | "mid" | "large" | "mega" {
+function getSizeBucket(employeeCount: number): "micro" | "small" | "mid" | "large" | "mega" {
   if (employeeCount < 50) return "micro";
   if (employeeCount < 500) return "small";
   if (employeeCount < 5000) return "mid";
@@ -99,137 +179,67 @@ function getSizeBucket(
 }
 
 // ---------------------------------------------------------------------------
-// Database insertion
+// Bootstrap single company
 // ---------------------------------------------------------------------------
 
-async function upsertCompany(data: {
-  ticker: string;
-  name: string;
-  industry: string;
-  sector: string;
-  employeeCount: number;
-  hqState: string;
-  hqCity: string;
-  website: string;
-  logoUrl: string;
-  description: string;
-  ceo: string;
-  mktCap: number;
-  cik: string | null;
-  sizeBucket: string;
-  exchange: string;
-  country: string;
-}): Promise<void> {
-  const pool = getPool();
-
-  await pool.query(
-    `INSERT INTO companies (
-      ticker, name, legal_name, industry, sector, employee_count,
-      hq_state, hq_city, website, logo_url, description, ceo,
-      market_cap, cik, size_bucket, exchange, country,
-      updated_at
-    ) VALUES (
-      $1, $2, $3, $4, $5, $6,
-      $7, $8, $9, $10, $11, $12,
-      $13, $14, $15, $16, $17,
-      NOW()
-    )
-    ON CONFLICT (ticker) DO UPDATE SET
-      name = EXCLUDED.name,
-      industry = EXCLUDED.industry,
-      sector = EXCLUDED.sector,
-      employee_count = EXCLUDED.employee_count,
-      hq_state = EXCLUDED.hq_state,
-      hq_city = EXCLUDED.hq_city,
-      website = EXCLUDED.website,
-      logo_url = EXCLUDED.logo_url,
-      description = EXCLUDED.description,
-      ceo = EXCLUDED.ceo,
-      market_cap = EXCLUDED.market_cap,
-      cik = COALESCE(EXCLUDED.cik, companies.cik),
-      size_bucket = EXCLUDED.size_bucket,
-      exchange = EXCLUDED.exchange,
-      country = EXCLUDED.country,
-      updated_at = NOW()`,
-    [
-      data.ticker,
-      data.name,
-      data.name, // legal_name defaults to name
-      data.industry,
-      data.sector,
-      data.employeeCount,
-      data.hqState,
-      data.hqCity,
-      data.website,
-      data.logoUrl,
-      data.description,
-      data.ceo,
-      data.mktCap,
-      data.cik,
-      data.sizeBucket,
-      data.exchange,
-      data.country,
-    ]
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Single ticker bootstrap
-// ---------------------------------------------------------------------------
-
-async function bootstrapSingleCompany(
-  ticker: string
-): Promise<BootstrapResult> {
+async function bootstrapSingleCompany(ticker: string): Promise<{ ticker: string; success: boolean; error?: string }> {
   try {
-    console.log(`[bootstrap] Processing ${ticker}...`);
+    const map = await getEdgarTickerMap();
+    const entry = map[ticker.toUpperCase()];
 
-    // Fetch FMP profile (includes industry, sector, employees, HQ, website)
-    const fmpData = await fetchFmpData(ticker);
-
-    if (!fmpData.profile) {
-      return {
-        ticker,
-        success: false,
-        error: "No profile data available from FMP",
-      };
+    if (!entry) {
+      return { ticker, success: false, error: "Not found in SEC EDGAR ticker list" };
     }
 
-    const profile = fmpData.profile;
+    // Fetch company details from EDGAR
+    const [submissions, facts] = await Promise.all([
+      fetchCompanySubmissions(entry.cik_str),
+      fetchCompanyFacts(entry.cik_str),
+    ]);
 
-    // Look up SEC CIK (non-blocking — we proceed even if it fails)
-    const cik = await lookupCik(ticker);
+    if (!submissions) {
+      return { ticker, success: false, error: "Could not fetch SEC submissions" };
+    }
 
-    // Insert into database
-    await upsertCompany({
-      ticker,
-      name: profile.companyName,
-      industry: profile.industry,
-      sector: profile.sector,
-      employeeCount: profile.fullTimeEmployees,
-      hqState: profile.state,
-      hqCity: profile.city,
-      website: profile.website,
-      logoUrl: profile.image,
-      description: profile.description.slice(0, 1000),
-      ceo: profile.ceo,
-      mktCap: profile.mktCap,
-      cik,
-      sizeBucket: getSizeBucket(profile.fullTimeEmployees),
-      exchange: profile.exchange,
-      country: profile.country,
-    });
+    const employeeCount = facts ? (getLatestFact(facts, "dei", "EntityNumberOfEmployees") ?? 0) : 0;
+    const sic = submissions.sic || "";
+    const industry = SIC_TO_INDUSTRY[sic] || submissions.sicDescription || "Other";
+    const hqState = submissions.addresses?.business?.stateOrCountry || "";
+    const companyName = submissions.name || entry.title;
+    const sizeBucket = employeeCount > 0 ? getSizeBucket(employeeCount) : "mid";
 
-    console.log(
-      `[bootstrap] ${ticker}: ${profile.companyName} ` +
-        `(${profile.sector} / ${profile.industry}, ` +
-        `${profile.fullTimeEmployees.toLocaleString()} employees` +
-        `${cik ? `, CIK: ${cik}` : ""})`
+    // Insert into database (matching actual schema columns)
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO companies (name, ticker, legal_name, industry, size_bucket, employee_count, hq_state, website, sec_cik, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+       ON CONFLICT (ticker) DO UPDATE SET
+         name = EXCLUDED.name,
+         legal_name = EXCLUDED.legal_name,
+         industry = EXCLUDED.industry,
+         size_bucket = EXCLUDED.size_bucket,
+         employee_count = COALESCE(NULLIF(EXCLUDED.employee_count, 0), companies.employee_count),
+         hq_state = EXCLUDED.hq_state,
+         sec_cik = EXCLUDED.sec_cik,
+         updated_at = NOW()`,
+      [
+        companyName,
+        ticker,
+        companyName,
+        industry,
+        sizeBucket,
+        employeeCount || null,
+        hqState,
+        "", // website — EDGAR doesn't provide this reliably
+        String(entry.cik_str),
+      ]
     );
 
+    console.log(`  ✓ ${ticker}: ${companyName} (${industry}, ${employeeCount > 0 ? employeeCount.toLocaleString() + " emp" : "emp unknown"}, ${hqState})`);
     return { ticker, success: true };
   } catch (err) {
     const msg = (err as Error).message;
-    console.error(`[bootstrap] ${ticker} failed: ${msg}`);
+    console.error(`  ✗ ${ticker}: ${msg}`);
     return { ticker, success: false, error: msg };
   }
 }
@@ -238,53 +248,39 @@ async function bootstrapSingleCompany(
 // Main export
 // ---------------------------------------------------------------------------
 
-/**
- * Bootstraps a list of companies into the database.
- * For each ticker: fetches FMP profile, looks up SEC CIK, and inserts/updates
- * the companies table.
- *
- * @param tickers - Array of stock ticker symbols to bootstrap.
- *                  Defaults to DEFAULT_TICKERS if empty.
- */
-export async function bootstrapCompanies(
-  tickers: string[] = DEFAULT_TICKERS
-): Promise<void> {
-  const tickerList = tickers.length > 0 ? tickers : DEFAULT_TICKERS;
+export async function bootstrapCompanies(tickers: string[] = DEFAULT_TICKERS): Promise<void> {
+  // First, add a unique constraint on ticker if it doesn't exist
+  const pool = getPool();
+  try {
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_ticker ON companies(ticker) WHERE ticker IS NOT NULL`);
+  } catch {
+    // Index may already exist
+  }
 
-  console.log(
-    `[bootstrap] Starting bootstrap for ${tickerList.length} companies...`
-  );
+  console.log(`\n[bootstrap] Starting bootstrap for ${tickers.length} companies using SEC EDGAR...\n`);
 
-  const results: BootstrapResult[] = [];
+  const results: Array<{ ticker: string; success: boolean; error?: string }> = [];
 
-  // Process in batches of 5 to avoid rate limits
+  // Process in batches of 5 (SEC rate limit: 10 req/s, we make 2-3 per company)
   const BATCH_SIZE = 5;
-  for (let i = 0; i < tickerList.length; i += BATCH_SIZE) {
-    const batch = tickerList.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map((ticker) => bootstrapSingleCompany(ticker))
-    );
+  for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+    const batch = tickers.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(batch.map((t) => bootstrapSingleCompany(t)));
     results.push(...batchResults);
 
-    // Brief pause between batches to respect rate limits
-    if (i + BATCH_SIZE < tickerList.length) {
-      await sleep(1000);
+    // Rate limit pause
+    if (i + BATCH_SIZE < tickers.length) {
+      await new Promise((r) => setTimeout(r, 1200));
     }
   }
 
-  // Summary
   const succeeded = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success);
 
-  console.log(
-    `\n[bootstrap] Complete: ${succeeded}/${tickerList.length} companies bootstrapped successfully.`
-  );
-
+  console.log(`\n[bootstrap] Done: ${succeeded}/${tickers.length} companies bootstrapped.`);
   if (failed.length > 0) {
-    console.log(`[bootstrap] Failed tickers:`);
-    for (const f of failed) {
-      console.log(`  - ${f.ticker}: ${f.error}`);
-    }
+    console.log(`[bootstrap] Failed (${failed.length}):`);
+    failed.forEach((f) => console.log(`  - ${f.ticker}: ${f.error}`));
   }
 
   await closePool();
@@ -294,19 +290,15 @@ export async function bootstrapCompanies(
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-if (require.main === module) {
-  const args = process.argv.slice(2);
-  const tickers = args.length > 0 ? args.map((t) => t.toUpperCase()) : DEFAULT_TICKERS;
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+if (require.main === module || process.argv[1]?.endsWith("company-bootstrap.ts")) {
+  const envTickers = process.env.BOOTSTRAP_TICKERS;
+  const tickers = envTickers ? envTickers.split(",").map((t) => t.trim()).filter(Boolean) : DEFAULT_TICKERS;
   bootstrapCompanies(tickers).catch((err) => {
     console.error("[bootstrap] Fatal error:", err);
     process.exit(1);
   });
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
