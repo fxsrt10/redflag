@@ -25,15 +25,7 @@ export default function CompanyDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Try static lookup first (instant for mock data IDs like "tesla")
-    const staticCompany = getCompanyById(id);
-    if (staticCompany) {
-      setCompany(staticCompany);
-      setLoading(false);
-      return;
-    }
-
-    // Otherwise fetch from API (for DB UUIDs)
+    // Always fetch from API — single source of truth
     fetch(`/api/companies/${id}`)
       .then((r) => r.json())
       .then((data) => {

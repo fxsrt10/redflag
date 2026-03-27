@@ -12,16 +12,20 @@ export async function GET(
   try {
     const sql = getDb();
 
-    // Try to find the company by slug-style id or by UUID
+    // Try to find the company by UUID, name, or ticker
+    const idLower = id.toLowerCase();
     const companyRows = await sql`
       SELECT * FROM companies
-      WHERE id::text = ${id} OR LOWER(name) = ${id.toLowerCase()}
+      WHERE id::text = ${id}
+        OR LOWER(name) = ${idLower}
+        OR LOWER(ticker) = ${idLower}
+        OR LOWER(REPLACE(name, ' ', '-')) = ${idLower}
+        OR LOWER(REPLACE(name, ' ', '')) = ${idLower}
       LIMIT 1
     `;
 
     if (companyRows.length === 0) {
-      // Fall back to mock data
-      return fallbackToMock(id);
+      return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
     const company = companyRows[0];
