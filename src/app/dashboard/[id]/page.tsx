@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getCompanyById, getFoundersByCompany, getPeerCompanies, getCompensationByCompany } from "@/lib/data";
 import { getLayoffsByCompany, getLayoffSummary } from "@/data/layoffs";
@@ -11,15 +12,47 @@ import { GlassdoorRadar } from "@/components/charts/GlassdoorRadar";
 import { LawsuitCategoryChart } from "@/components/charts/LawsuitCategoryChart";
 import { RiskBreakdownBars } from "@/components/charts/RiskBreakdownBars";
 import { cn, getRiskColor, getRiskBgSolid, formatCurrency, formatNumber, getCategoryBg, getTrendInfo, safeWebsiteHref, isSafeUrl } from "@/lib/utils";
+import type { Company } from "@/types";
 import {
   ArrowLeft, Building2, ExternalLink, Scale, Users, TrendingDown,
-  AlertTriangle, Globe, MapPin, Briefcase, Star, Scissors, Newspaper,
+  AlertTriangle, Globe, MapPin, Briefcase, Star, Scissors, Newspaper, Loader2,
 } from "lucide-react";
 
 export default function CompanyDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const company = getCompanyById(id);
+  const [company, setCompany] = useState<Company | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Try static lookup first (instant for mock data IDs like "tesla")
+    const staticCompany = getCompanyById(id);
+    if (staticCompany) {
+      setCompany(staticCompany);
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise fetch from API (for DB UUIDs)
+    fetch(`/api/companies/${id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.name) {
+          setCompany(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 text-red-400 animate-spin mb-4" />
+        <p className="text-muted text-sm">Loading company data...</p>
+      </div>
+    );
+  }
 
   if (!company) {
     return (
@@ -36,7 +69,7 @@ export default function CompanyDetailPage() {
   const compEntries = getCompensationByCompany(company.id);
   const layoffs = getLayoffsByCompany(company.id);
   const layoffSummary = getLayoffSummary(company.id);
-  const trend = getTrendInfo(company.glassdoor.trend);
+  const trend = getTrendInfo(company.glassdoor?.trend ?? "stable");
 
   return (
     <div className="max-w-7xl">
@@ -47,8 +80,8 @@ export default function CompanyDetailPage() {
         </Link>
         <ShareCard
           companyName={company.name}
-          riskScore={company.riskScore.overall}
-          riskLevel={company.riskScore.riskLevel}
+          riskScore={company.riskScore?.overall ?? 0}
+          riskLevel={company.riskScore?.riskLevel ?? "moderate"}
         />
       </div>
 
@@ -80,7 +113,7 @@ export default function CompanyDetailPage() {
               <div className="text-xs text-muted/60 mt-1">{company.legalName} · {company.sizeBucket} cap</div>
             </div>
           </div>
-          <RiskBadge level={company.riskScore.riskLevel} score={company.riskScore.overall} size="lg" />
+          <RiskBadge level={company.riskScore?.riskLevel ?? "moderate"} score={company.riskScore?.overall ?? 0} size="lg" />
         </div>
       </section>
 
@@ -91,18 +124,18 @@ export default function CompanyDetailPage() {
           <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-red-400" /> Risk Score Breakdown
           </h2>
-          <RiskBreakdownBars riskScore={company.riskScore} />
+          {company.riskScore ? <RiskBreakdownBars riskScore={company.riskScore} /> : <div className="py-8 text-center text-muted text-sm">No risk score data</div>}
           <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-card-border">
             <div>
               <div className="text-[10px] text-muted uppercase tracking-wider">Industry Percentile</div>
-              <div className={cn("text-xl font-bold", getRiskColor(company.riskScore.riskLevel))}>
-                P{company.riskScore.industryPercentile}
+              <div className={cn("text-xl font-bold", getRiskColor(company.riskScore?.riskLevel ?? "moderate"))}>
+                P{company.riskScore?.industryPercentile ?? 0}
               </div>
             </div>
             <div>
               <div className="text-[10px] text-muted uppercase tracking-wider">Size Percentile</div>
-              <div className={cn("text-xl font-bold", getRiskColor(company.riskScore.riskLevel))}>
-                P{company.riskScore.sizePercentile}
+              <div className={cn("text-xl font-bold", getRiskColor(company.riskScore?.riskLevel ?? "moderate"))}>
+                P{company.riskScore?.sizePercentile ?? 0}
               </div>
             </div>
           </div>
@@ -113,19 +146,19 @@ export default function CompanyDetailPage() {
           <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">
             <Star className="w-4 h-4 text-yellow-400" /> Glassdoor Ratings
           </h2>
-          <GlassdoorRadar glassdoor={company.glassdoor} />
+          {company.glassdoor ? <GlassdoorRadar glassdoor={company.glassdoor} /> : <div className="h-64 flex items-center justify-center text-muted text-sm">No Glassdoor data available</div>}
           <div className="grid grid-cols-3 gap-3 mt-2">
             <div className="text-center">
               <div className="text-[10px] text-muted">Recommend</div>
-              <div className="text-lg font-bold">{company.glassdoor.recommendPct}%</div>
+              <div className="text-lg font-bold">{company.glassdoor?.recommendPct ?? "—"}%</div>
             </div>
             <div className="text-center">
               <div className="text-[10px] text-muted">CEO Approval</div>
-              <div className="text-lg font-bold">{company.glassdoor.ceoApprovalPct}%</div>
+              <div className="text-lg font-bold">{company.glassdoor?.ceoApprovalPct ?? "—"}%</div>
             </div>
             <div className="text-center">
               <div className="text-[10px] text-muted">Reviews</div>
-              <div className="text-lg font-bold">{formatNumber(company.glassdoor.reviewCount)}</div>
+              <div className="text-lg font-bold">{company.glassdoor?.reviewCount ? formatNumber(company.glassdoor.reviewCount) : "—"}</div>
             </div>
           </div>
         </section>
@@ -436,9 +469,9 @@ export default function CompanyDetailPage() {
                   {/* Current company row highlighted */}
                   <tr className="border-b border-red-500/20 bg-red-500/5">
                     <td className="py-2 text-sm font-medium text-red-400">{company.name} (current)</td>
-                    <td className={cn("py-2 text-sm text-right font-bold", getRiskColor(company.riskScore.riskLevel))}>{company.riskScore.overall}</td>
-                    <td className="py-2 text-sm text-right">{company.glassdoor.overall}</td>
-                    <td className="py-2 text-sm text-right">{company.lawsuits.filingsPerThousandEmployees.toFixed(2)}</td>
+                    <td className={cn("py-2 text-sm text-right font-bold", getRiskColor(company.riskScore?.riskLevel ?? "moderate"))}>{company.riskScore?.overall ?? 0}</td>
+                    <td className="py-2 text-sm text-right">{company.glassdoor?.overall ?? "—"}</td>
+                    <td className="py-2 text-sm text-right">{company.lawsuits?.filingsPerThousandEmployees?.toFixed(2) ?? "—"}</td>
                   </tr>
                   {peers.map((peer) => (
                     <tr key={peer.id} className="border-b border-card-border/30 hover:bg-white/[0.02]">
