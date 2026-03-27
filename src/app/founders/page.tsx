@@ -1,19 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { founders } from "@/data/mock";
+import { useState, useEffect } from "react";
+import { founders as staticFounders } from "@/data/mock";
+import type { Founder } from "@/types";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { StatCard } from "@/components/ui/StatCard";
 import { cn, getRiskColor } from "@/lib/utils";
 import { Users, ChevronDown, ChevronUp, TrendingDown, Scale, Zap } from "lucide-react";
 
 export default function FoundersPage() {
-  const [expandedId, setExpandedId] = useState<string | null>("musk");
+  const [founders, setFounders] = useState<Founder[]>(staticFounders);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const sortedFounders = [...founders].sort((a, b) => b.impactScore - a.impactScore);
-  const avgImpact = Math.round(founders.reduce((s, f) => s + f.impactScore, 0) / founders.length);
-  const totalControversies = founders.reduce((s, f) => s + f.controversyEvents.length, 0);
-  const totalLegalEvents = founders.reduce((s, f) => s + f.legalEvents.length, 0);
+  useEffect(() => {
+    fetch("/api/founders")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.founders?.length > 0) {
+          setFounders(data.founders);
+          setExpandedId(data.founders[0]?.id ?? null);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const sortedFounders = [...founders].sort((a, b) => (b.impactScore ?? 0) - (a.impactScore ?? 0));
+  const avgImpact = founders.length > 0 ? Math.round(founders.reduce((s, f) => s + (f.impactScore ?? 0), 0) / founders.length) : 0;
+  const totalControversies = founders.reduce((s, f) => s + (f.controversyEvents?.length ?? 0), 0);
+  const totalLegalEvents = founders.reduce((s, f) => s + (f.legalEvents?.length ?? 0), 0);
 
   return (
     <div>

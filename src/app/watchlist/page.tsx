@@ -1,24 +1,37 @@
 "use client";
 
-import { useState } from "react";
-import { forbes30u30, forbes30u30YearStats } from "@/data/mock";
+import { useState, useEffect } from "react";
+import { forbes30u30 as staticForbes, forbes30u30YearStats as staticYearStats } from "@/data/mock";
+import type { Forbes30u30, Forbes30u30YearStats } from "@/types";
 import { StatCard } from "@/components/ui/StatCard";
 import { cn, getStatusColor } from "@/lib/utils";
 import { Award, Filter } from "lucide-react";
 
 export default function WatchlistPage() {
+  const [people, setPeople] = useState<Forbes30u30[]>(staticForbes);
+  const [yearStats, setYearStats] = useState<Forbes30u30YearStats[]>(staticYearStats);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  useEffect(() => {
+    fetch("/api/watchlist")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.people?.length > 0) setPeople(data.people);
+        if (data.yearStats?.length > 0) setYearStats(data.yearStats);
+      })
+      .catch(() => {});
+  }, []);
+
   const filtered = statusFilter === "all"
-    ? forbes30u30
-    : forbes30u30.filter((p) => p.currentStatus === statusFilter);
+    ? people
+    : people.filter((p) => p.currentStatus === statusFilter);
 
-  const convictedCount = forbes30u30.filter((p) => p.currentStatus === "convicted").length;
-  const chargedCount = forbes30u30.filter((p) => p.currentStatus === "charged" || p.currentStatus === "under_investigation").length;
-  const cleanCount = forbes30u30.filter((p) => p.currentStatus === "clean").length;
-  const totalEvents = forbes30u30.reduce((s, p) => s + p.events.length, 0);
+  const convictedCount = people.filter((p) => p.currentStatus === "convicted").length;
+  const chargedCount = people.filter((p) => p.currentStatus === "charged" || p.currentStatus === "under_investigation").length;
+  const cleanCount = people.filter((p) => p.currentStatus === "clean").length;
+  const totalEvents = people.reduce((s, p) => s + (p.events?.length ?? 0), 0);
 
-  const worstYear = forbes30u30YearStats.reduce((max, y) => y.fraudRatePct > max.fraudRatePct ? y : max, forbes30u30YearStats[0]);
+  const worstYear = yearStats.length > 0 ? yearStats.reduce((max, y) => y.fraudRatePct > max.fraudRatePct ? y : max, yearStats[0]) : null;
 
   return (
     <div>
@@ -30,18 +43,18 @@ export default function WatchlistPage() {
       </div>
 
       <div className="grid grid-cols-5 gap-4 mb-8">
-        <StatCard label="Alumni Tracked" value={forbes30u30.length} />
+        <StatCard label="Alumni Tracked" value={people.length} />
         <StatCard label="Convicted" value={convictedCount} trend="up" />
         <StatCard label="Charged / Investigated" value={chargedCount} />
         <StatCard label="Clean Record" value={cleanCount} />
-        <StatCard label="Worst Class Year" value={worstYear.listYear} subValue={`${worstYear.fraudRatePct}% fraud rate`} />
+        <StatCard label="Worst Class Year" value={worstYear?.listYear ?? "—"} subValue={worstYear ? `${worstYear.fraudRatePct}% fraud rate` : undefined} />
       </div>
 
       {/* Year Stats Bar */}
       <div className="bg-card border border-card-border rounded-xl p-5 mb-8">
         <h3 className="text-xs text-muted uppercase tracking-wider mb-4">Fraud Rate by Class Year</h3>
         <div className="flex items-end gap-3 h-24">
-          {forbes30u30YearStats.map((year) => (
+          {yearStats.map((year) => (
             <div key={year.listYear} className="flex flex-col items-center gap-1 flex-1">
               <div className="text-[10px] font-bold text-muted">{year.fraudRatePct}%</div>
               <div

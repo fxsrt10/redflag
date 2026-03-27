@@ -128,19 +128,19 @@ export default function LeaderboardsPage() {
                   <td className="p-4">
                     <Link href={`/dashboard/${company.id}`} className="hover:text-red-400 transition-colors">
                       <div className="font-medium text-sm">{company.name}</div>
-                      <div className="text-[10px] text-muted">{company.ticker ?? "Private"} · {formatNumber(company.employeeCount)} emp</div>
+                      <div className="text-[10px] text-muted">{company.ticker ?? "Private"} · {company.employeeCount ? formatNumber(company.employeeCount) : "—"} emp</div>
                     </Link>
                   </td>
                   <td className="p-4 text-sm text-muted">{company.industry}</td>
                   <td className="p-4 text-sm text-muted capitalize">{company.sizeBucket}</td>
                   <td className="p-4 text-right">
-                    <span className={cn("text-sm font-bold", metric === "risk" ? getRiskColor(company.riskScore.riskLevel) : "")}>
+                    <span className={cn("text-sm font-bold", metric === "risk" ? getRiskColor(company.riskScore?.riskLevel ?? "moderate") : "")}>
                       {currentMetric.format(value)}
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full border capitalize", getRiskBg(company.riskScore.riskLevel), getRiskColor(company.riskScore.riskLevel))}>
-                      {company.riskScore.riskLevel}
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full border capitalize", getRiskBg(company.riskScore?.riskLevel ?? "moderate"), getRiskColor(company.riskScore?.riskLevel ?? "moderate"))}>
+                      {company.riskScore?.riskLevel ?? "—"}
                     </span>
                   </td>
                   <td className="p-4">
